@@ -12,20 +12,25 @@ export default function LoginScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) return Alert.alert('Error', 'Please fill in all fields');
-    setLoading(true);
+  if (!email || !password) return Alert.alert('Error', 'Please fill in all fields');
+  setLoading(true);
+  try {
+    let push_token = null;
     try {
-      const push_token = await registerForPushNotificationsAsync();
-      const res = await axios.post(`${API}/auth/login`, { email, password, push_token });
-      const { token, user } = res.data;
-      if (user.role === 'tailor') navigation.replace('TailorDashboard', { token, user });
-else if (user.role === 'client') navigation.replace('ClientHome', { token, user });
-else if (user.role === 'admin') navigation.replace('AdminDashboard', { token, user });
-    } catch (err) {
-      Alert.alert('Login Failed', err.response?.data?.error || 'Something went wrong');
+      push_token = await registerForPushNotificationsAsync();
+    } catch (e) {
+      // push notifications not available, continue without token
     }
-    setLoading(false);
-  };
+    const res = await axios.post(`${API}/auth/login`, { email, password, push_token });
+    const { token, user } = res.data;
+    if (user.role === 'tailor') navigation.replace('TailorDashboard', { token, user });
+    else if (user.role === 'client') navigation.replace('ClientHome', { token, user });
+    else if (user.role === 'admin') navigation.replace('AdminDashboard', { token, user });
+  } catch (err) {
+    Alert.alert('Login Failed', err.response?.data?.error || 'Something went wrong');
+  }
+  setLoading(false);
+};
 
   return (
     <View style={styles.container}>
