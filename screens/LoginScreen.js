@@ -27,8 +27,11 @@ export default function LoginScreen({ navigation }) {
     else if (user.role === 'client') navigation.replace('ClientHome', { token, user });
     else if (user.role === 'admin') navigation.replace('AdminDashboard', { token, user });
   } catch (err) {
-    Alert.alert('Login Failed', err.response?.data?.error || 'Something went wrong');
-  }
+  console.log('Login error:', JSON.stringify(err));
+  console.log('Response:', JSON.stringify(err.response?.data));
+  console.log('Message:', err.message);
+  Alert.alert('Login Failed', err.response?.data?.error || err.message || 'Something went wrong');
+}
   setLoading(false);
 };
 
