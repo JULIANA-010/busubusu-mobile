@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 
 const API = 'https://busubusu-backend.onrender.com/api';
@@ -10,14 +11,55 @@ export default function TailorSettingsScreen({ route, navigation }) {
   const [name, setName] = useState(user.name || '');
   const [phone, setPhone] = useState(user.phone || '');
   const [district, setDistrict] = useState(user.district || 'Kyenjojo');
+  const [avatarUrl, setAvatarUrl] = useState(user.avatar_url || null);
   const [loading, setLoading] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+
+  const pickAndUploadAvatar = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow access to your photo library');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled) return;
+
+      setAvatarLoading(true);
+      const uri = result.assets[0].uri;
+      const filename = uri.split('/').pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const formData = new FormData();
+      formData.append('avatar', { uri, name: filename, type });
+
+      const res = await axios.post(`${API}/users/upload-avatar`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setAvatarUrl(res.data.avatar_url);
+      Alert.alert('✅ Success', 'Profile photo updated!');
+    } catch (err) {
+      Alert.alert('Error', err?.response?.data?.error || err?.message || 'Upload failed');
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!name || !phone) return Alert.alert('Error', 'Name and phone are required');
     setLoading(true);
     try {
       await axios.put(`${API}/users/update-profile`,
-        { name, phone, district, avatar_url: user.avatar_url },
+        { name, phone, district, avatar_url: avatarUrl },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       Alert.alert('✅ Success', 'Profile updated!', [
@@ -38,7 +80,6 @@ export default function TailorSettingsScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.back}>← Back</Text>
@@ -49,13 +90,26 @@ export default function TailorSettingsScreen({ route, navigation }) {
 
       {/* Avatar */}
       <View style={styles.avatarWrapper}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarLetter}>{name?.[0]?.toUpperCase()}</Text>
-        </View>
+        <TouchableOpacity onPress={pickAndUploadAvatar} disabled={avatarLoading}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarLetter}>{name?.[0]?.toUpperCase()}</Text>
+            </View>
+          )}
+          {avatarLoading ? (
+            <ActivityIndicator color="#e91e8c" style={styles.avatarOverlay} />
+          ) : (
+            <View style={styles.cameraIcon}>
+              <Text style={{ fontSize: 16 }}>📷</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <Text style={styles.changePhoto}>Tap to change photo</Text>
         <Text style={styles.roleTag}>🧵 Tailor</Text>
       </View>
 
-      {/* Info */}
       <Text style={styles.label}>Full Name</Text>
       <TextInput style={styles.input} value={name} onChangeText={setName}
         placeholder="Your name" placeholderTextColor="#aaa" />
@@ -88,10 +142,7 @@ export default function TailorSettingsScreen({ route, navigation }) {
       </View>
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
-        {loading
-          ? <ActivityIndicator color="#1a1a2e" />
-          : <Text style={styles.saveBtnText}>Save Changes</Text>
-        }
+        {loading ? <ActivityIndicator color="#1a1a2e" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -108,9 +159,13 @@ const styles = StyleSheet.create({
   back: { color: '#2e7d32', fontSize: 16, fontWeight: 'bold' },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   avatarWrapper: { alignItems: 'center', marginVertical: 20 },
-  avatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#2e7d32', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  avatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#2e7d32', justifyContent: 'center', alignItems: 'center' },
+  avatarImage: { width: 90, height: 90, borderRadius: 45 },
   avatarLetter: { color: '#fff', fontSize: 36, fontWeight: 'bold' },
-  roleTag: { color: '#aaa', fontSize: 14 },
+  avatarOverlay: { position: 'absolute', top: 30, left: 30 },
+  cameraIcon: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#e91e8c', borderRadius: 12, padding: 4 },
+  changePhoto: { color: '#e91e8c', fontSize: 13, marginTop: 8 },
+  roleTag: { color: '#aaa', fontSize: 14, marginTop: 4 },
   label: { color: '#fff', fontSize: 15, marginBottom: 6, marginTop: 14, paddingHorizontal: 20 },
   input: { backgroundColor: '#2a2a3e', color: '#fff', padding: 14, borderRadius: 10, marginHorizontal: 20, fontSize: 15 },
   inputDisabled: { backgroundColor: '#1e1e30', padding: 14, borderRadius: 10, marginHorizontal: 20 },
