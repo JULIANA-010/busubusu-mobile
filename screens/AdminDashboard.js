@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, RefreshControl
+  ActivityIndicator, Alert, RefreshControl, ScrollView
 } from 'react-native';
 import axios from 'axios';
 
@@ -10,17 +10,22 @@ const API = 'https://busubusu-backend.onrender.com/api';
 export default function AdminDashboard({ route, navigation }) {
   const { token, user } = route.params;
   const [pendingTailors, setPendingTailors] = useState([]);
+  const [allTailors, setAllTailors] = useState([]);
+  const [clientsCount, setClientsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [activeTab, setActiveTab] = useState('pending');
 
-  const fetchPending = async () => {
+  const fetchData = async () => {
     try {
-      const res = await axios.get(`${API}/admin/pending-tailors`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setPendingTailors(res.data);
-      setStats(prev => ({ ...prev, pending: res.data.length }));
+      const [pendingRes, allRes, clientsRes] = await Promise.all([
+        axios.get(`${API}/admin/pending-tailors`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/admin/all-tailors`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/admin/clients-count`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      setPendingTailors(pendingRes.data);
+      setAllTailors(allRes.data);
+      setClientsCount(clientsRes.data.count);
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed to load');
     }
@@ -28,58 +33,68 @@ export default function AdminDashboard({ route, navigation }) {
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchPending(); }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const handleApprove = async (tailorId, tailorName) => {
-    Alert.alert(
-      'Approve Tailor',
-      `Approve ${tailorName} to start posting work?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Approve ✅',
-          onPress: async () => {
-            try {
-              await axios.put(`${API}/admin/approve/${tailorId}`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              Alert.alert('✅ Approved!', `${tailorName} can now post their work.`);
-              fetchPending();
-            } catch (err) {
-              Alert.alert('Error', err.response?.data?.error || 'Failed to approve');
-            }
+    Alert.alert('Approve Tailor', `Approve ${tailorName} to start posting work?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Approve ✅', onPress: async () => {
+          try {
+            await axios.put(`${API}/admin/approve/${tailorId}`, {}, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            Alert.alert('✅ Approved!', `${tailorName} can now post their work.`);
+            fetchData();
+          } catch (err) {
+            Alert.alert('Error', err.response?.data?.error || 'Failed to approve');
           }
         }
-      ]
-    );
+      }
+    ]);
   };
 
   const handleReject = async (tailorId, tailorName) => {
-    Alert.alert(
-      'Reject Tailor',
-      `Reject ${tailorName}'s application?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject ❌',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await axios.put(`${API}/admin/reject/${tailorId}`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              Alert.alert('❌ Rejected', `${tailorName}'s account has been rejected.`);
-              fetchPending();
-            } catch (err) {
-              Alert.alert('Error', err.response?.data?.error || 'Failed to reject');
-            }
+    Alert.alert('Reject Tailor', `Reject ${tailorName}'s application?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject ❌', style: 'destructive', onPress: async () => {
+          try {
+            await axios.put(`${API}/admin/reject/${tailorId}`, {}, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            Alert.alert('❌ Rejected', `${tailorName}'s account has been rejected.`);
+            fetchData();
+          } catch (err) {
+            Alert.alert('Error', err.response?.data?.error || 'Failed to reject');
           }
         }
-      ]
-    );
+      }
+    ]);
   };
 
-  const renderTailor = ({ item }) => (
+  const handleRevoke = async (tailorId, tailorName) => {
+    Alert.alert('Revoke Approval', `Remove ${tailorName}'s posting permission?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Revoke 🚫', style: 'destructive', onPress: async () => {
+          try {
+            await axios.put(`${API}/admin/revoke/${tailorId}`, {}, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            Alert.alert('🚫 Revoked', `${tailorName}'s approval has been removed.`);
+            fetchData();
+          } catch (err) {
+            Alert.alert('Error', err.response?.data?.error || 'Failed to revoke');
+          }
+        }
+      }
+    ]);
+  };
+
+  const approvedTailors = allTailors.filter(t => t.is_approved);
+
+  const renderPendingTailor = ({ item }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.avatar}>
@@ -93,7 +108,6 @@ export default function AdminDashboard({ route, navigation }) {
           <Text style={styles.pendingBadgeText}>Pending</Text>
         </View>
       </View>
-
       <View style={styles.detailsRow}>
         <View style={styles.detail}>
           <Text style={styles.detailLabel}>📞 Phone</Text>
@@ -105,24 +119,38 @@ export default function AdminDashboard({ route, navigation }) {
         </View>
         <View style={styles.detail}>
           <Text style={styles.detailLabel}>📅 Applied</Text>
-          <Text style={styles.detailValue}>
-            {new Date(item.created_at).toLocaleDateString()}
-          </Text>
+          <Text style={styles.detailValue}>{new Date(item.created_at).toLocaleDateString()}</Text>
         </View>
       </View>
-
       <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.rejectBtn}
-          onPress={() => handleReject(item.id, item.name)}>
+        <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item.id, item.name)}>
           <Text style={styles.rejectBtnText}>❌ Reject</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.approveBtn}
-          onPress={() => handleApprove(item.id, item.name)}>
+        <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(item.id, item.name)}>
           <Text style={styles.approveBtnText}>✅ Approve</Text>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+
+  const renderApprovedTailor = ({ item }) => (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.avatar, { backgroundColor: '#1a5c1a' }]}>
+          <Text style={styles.avatarText}>{item.name?.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={styles.tailorName}>{item.name}</Text>
+          <Text style={styles.tailorEmail}>{item.email}</Text>
+          <Text style={styles.tailorDistrict}>📍 {item.district || 'N/A'}</Text>
+        </View>
+        <View style={styles.approvedBadge}>
+          <Text style={styles.approvedBadgeText}>✅ Active</Text>
+        </View>
+      </View>
+      <TouchableOpacity style={styles.revokeBtn} onPress={() => handleRevoke(item.id, item.name)}>
+        <Text style={styles.revokeBtnText}>🚫 Revoke Permission</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -142,44 +170,69 @@ export default function AdminDashboard({ route, navigation }) {
       {/* Stats */}
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
-          <Text style={styles.statNum}>{stats.pending}</Text>
+          <Text style={styles.statNum}>{pendingTailors.length}</Text>
           <Text style={styles.statLabel}>Pending</Text>
         </View>
-        <View style={[styles.statBox, styles.statBoxGreen]}>
-          <Text style={[styles.statNum, styles.statNumGreen]}>⏳</Text>
-          <Text style={styles.statLabel}>Awaiting Review</Text>
+        <View style={styles.statBox}>
+          <Text style={styles.statNum}>{approvedTailors.length}</Text>
+          <Text style={styles.statLabel}>Approved</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statNum}>{allTailors.length}</Text>
+          <Text style={styles.statLabel}>All Tailors</Text>
+        </View>
+        <View style={[styles.statBox, { borderColor: '#e91e8c', borderWidth: 1 }]}>
+          <Text style={[styles.statNum, { color: '#e91e8c' }]}>{clientsCount}</Text>
+          <Text style={styles.statLabel}>Clients</Text>
         </View>
       </View>
 
-      {/* Section title */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Pending Tailor Applications</Text>
-        <Text style={styles.sectionCount}>{pendingTailors.length} waiting</Text>
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'pending' && styles.tabActive]}
+          onPress={() => setActiveTab('pending')}>
+          <Text style={[styles.tabText, activeTab === 'pending' && styles.tabTextActive]}>
+            Pending ({pendingTailors.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'approved' && styles.tabActive]}
+          onPress={() => setActiveTab('approved')}>
+          <Text style={[styles.tabText, activeTab === 'approved' && styles.tabTextActive]}>
+            Approved ({approvedTailors.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {loading
-        ? <ActivityIndicator size="large" color="#2e7d32" style={{ marginTop: 40 }} />
-        : <FlatList
-            data={pendingTailors}
-            keyExtractor={item => item.id}
-            renderItem={renderTailor}
-            contentContainerStyle={{ padding: 16 }}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={() => { setRefreshing(true); fetchPending(); }}
-                tintColor="#2e7d32"
-              />
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyIcon}>✅</Text>
-                <Text style={styles.emptyTitle}>All caught up!</Text>
-                <Text style={styles.emptySub}>No pending tailor applications right now.</Text>
-              </View>
-            }
-          />
-      }
+      {loading ? (
+        <ActivityIndicator size="large" color="#2e7d32" style={{ marginTop: 40 }} />
+      ) : (
+        <FlatList
+          data={activeTab === 'pending' ? pendingTailors : approvedTailors}
+          keyExtractor={item => item.id}
+          renderItem={activeTab === 'pending' ? renderPendingTailor : renderApprovedTailor}
+          contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); fetchData(); }}
+              tintColor="#2e7d32"
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyIcon}>{activeTab === 'pending' ? '✅' : '🧵'}</Text>
+              <Text style={styles.emptyTitle}>
+                {activeTab === 'pending' ? 'All caught up!' : 'No approved tailors yet'}
+              </Text>
+              <Text style={styles.emptySub}>
+                {activeTab === 'pending' ? 'No pending applications.' : 'Approve tailors from the Pending tab.'}
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -191,15 +244,15 @@ const styles = StyleSheet.create({
   headerSub: { color: '#aaa', fontSize: 13, marginTop: 2 },
   adminBadge: { backgroundColor: '#2e7d32', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
   adminBadgeText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  statsRow: { flexDirection: 'row', padding: 16, gap: 12 },
-  statBox: { flex: 1, backgroundColor: '#1a3a1a', padding: 16, borderRadius: 12, alignItems: 'center' },
-  statBoxGreen: { borderWidth: 1, borderColor: '#2e7d32' },
-  statNum: { fontSize: 28, fontWeight: 'bold', color: '#2e7d32' },
-  statNumGreen: { fontSize: 24 },
-  statLabel: { color: '#aaa', fontSize: 12, marginTop: 4, textAlign: 'center' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8 },
-  sectionTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  sectionCount: { color: '#2e7d32', fontSize: 13 },
+  statsRow: { flexDirection: 'row', padding: 12, gap: 8 },
+  statBox: { flex: 1, backgroundColor: '#1a3a1a', padding: 12, borderRadius: 12, alignItems: 'center' },
+  statNum: { fontSize: 24, fontWeight: 'bold', color: '#2e7d32' },
+  statLabel: { color: '#aaa', fontSize: 11, marginTop: 4, textAlign: 'center' },
+  tabRow: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 8, backgroundColor: '#1a3a1a', borderRadius: 12, padding: 4 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  tabActive: { backgroundColor: '#2e7d32' },
+  tabText: { color: '#aaa', fontWeight: 'bold', fontSize: 14 },
+  tabTextActive: { color: '#fff' },
   card: { backgroundColor: '#1a3a1a', borderRadius: 14, padding: 16, marginBottom: 14, borderWidth: 0.5, borderColor: '#2e7d32' },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#2e7d32', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
@@ -207,8 +260,11 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1 },
   tailorName: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   tailorEmail: { color: '#aaa', fontSize: 13, marginTop: 2 },
+  tailorDistrict: { color: '#aaa', fontSize: 12, marginTop: 2 },
   pendingBadge: { backgroundColor: '#3a2a0e', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: '#f5a623' },
   pendingBadgeText: { color: '#f5a623', fontSize: 11, fontWeight: 'bold' },
+  approvedBadge: { backgroundColor: '#0a2a0a', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: '#2e7d32' },
+  approvedBadgeText: { color: '#2e7d32', fontSize: 11, fontWeight: 'bold' },
   detailsRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#0a1f0a', padding: 12, borderRadius: 10, marginBottom: 14 },
   detail: { alignItems: 'center', flex: 1 },
   detailLabel: { color: '#aaa', fontSize: 11, marginBottom: 4 },
@@ -218,6 +274,8 @@ const styles = StyleSheet.create({
   rejectBtnText: { color: '#ef5350', fontWeight: 'bold', fontSize: 14 },
   approveBtn: { flex: 1, backgroundColor: '#2e7d32', padding: 12, borderRadius: 10, alignItems: 'center' },
   approveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  revokeBtn: { backgroundColor: '#3a0a0a', padding: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#c62828', marginTop: 8 },
+  revokeBtnText: { color: '#ef5350', fontWeight: 'bold', fontSize: 14 },
   emptyBox: { alignItems: 'center', marginTop: 80 },
   emptyIcon: { fontSize: 60, marginBottom: 16 },
   emptyTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
