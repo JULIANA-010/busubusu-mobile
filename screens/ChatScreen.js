@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { io } from 'socket.io-client';
@@ -55,7 +55,10 @@ export default function ChatScreen({ route, navigation }) {
   const pickAndSendImage = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) return;
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow access to your photo library');
+        return;
+      }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -63,13 +66,14 @@ export default function ChatScreen({ route, navigation }) {
       });
 
       if (result.canceled) return;
-      Alert.alert('Debug', `Image picked: ${result.assets[0].uri.substring(0, 50)}`);
 
       setUploading(true);
       const uri = result.assets[0].uri;
       const filename = uri.split('/').pop();
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      Alert.alert('Uploading...', `File: ${filename}`);
 
       const formData = new FormData();
       formData.append('image', { uri, name: filename, type });
@@ -82,55 +86,14 @@ export default function ChatScreen({ route, navigation }) {
       });
 
       const imageUrl = uploadRes.data.url;
-
       socketRef.current.emit('send_message', {
         senderId: user.id,
         receiverId: otherUser.id,
         content: `[IMAGE]${imageUrl}`,
       });
-    const pickAndSendImage = async () => {
-  try {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow access to your photo library');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-
-    if (result.canceled) return;
-
-    setUploading(true);
-    const uri = result.assets[0].uri;
-    const filename = uri.split('/').pop();
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-    const formData = new FormData();
-    formData.append('image', { uri, name: filename, type });
-
-    const uploadRes = await axios.post(`${API}/messages/upload-image`, formData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    const imageUrl = uploadRes.data.url;
-    socketRef.current.emit('send_message', {
-      senderId: user.id,
-      receiverId: otherUser.id,
-      content: `[IMAGE]${imageUrl}`,
-    });
-  } catch (err) {
-    Alert.alert('Upload Failed', err.response?.data?.error || err.message || 'Unknown error');
-  } finally {
-    setUploading(false);
-  }
-};
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || JSON.stringify(err);
+      Alert.alert('Upload Failed', msg);
     } finally {
       setUploading(false);
     }
