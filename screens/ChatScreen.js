@@ -63,6 +63,7 @@ export default function ChatScreen({ route, navigation }) {
       });
 
       if (result.canceled) return;
+      Alert.alert('Debug', `Image picked: ${result.assets[0].uri.substring(0, 50)}`);
 
       setUploading(true);
       const uri = result.assets[0].uri;
