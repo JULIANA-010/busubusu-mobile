@@ -87,8 +87,49 @@ export default function ChatScreen({ route, navigation }) {
         receiverId: otherUser.id,
         content: `[IMAGE]${imageUrl}`,
       });
-    } catch (err) {
-      console.error('Image send error:', err);
+    const pickAndSendImage = async () => {
+  try {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow access to your photo library');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+
+    if (result.canceled) return;
+
+    setUploading(true);
+    const uri = result.assets[0].uri;
+    const filename = uri.split('/').pop();
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+    const formData = new FormData();
+    formData.append('image', { uri, name: filename, type });
+
+    const uploadRes = await axios.post(`${API}/messages/upload-image`, formData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    const imageUrl = uploadRes.data.url;
+    socketRef.current.emit('send_message', {
+      senderId: user.id,
+      receiverId: otherUser.id,
+      content: `[IMAGE]${imageUrl}`,
+    });
+  } catch (err) {
+    Alert.alert('Upload Failed', err.response?.data?.error || err.message || 'Unknown error');
+  } finally {
+    setUploading(false);
+  }
+};
     } finally {
       setUploading(false);
     }
