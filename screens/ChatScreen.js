@@ -73,8 +73,6 @@ export default function ChatScreen({ route, navigation }) {
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-      Alert.alert('Uploading...', `File: ${filename}`);
-
       const formData = new FormData();
       formData.append('image', { uri, name: filename, type });
 
@@ -99,24 +97,48 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
+  const deleteMessage = async (messageId, isMine) => {
+    if (!isMine) return;
+    Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await axios.delete(`${API}/messages/${messageId}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            setMessages(prev => prev.filter(m => m.id !== messageId));
+          } catch (err) {
+            Alert.alert('Error', 'Could not delete message');
+          }
+        }
+      }
+    ]);
+  };
+
   const renderMessage = ({ item }) => {
     const isMine = item.sender_id === user.id;
     const isImage = item.content?.startsWith('[IMAGE]');
     const imageUrl = isImage ? item.content.replace('[IMAGE]', '') : null;
 
     return (
-      <View style={[styles.bubble, isMine ? styles.myBubble : styles.theirBubble]}>
-        {isImage ? (
-          <Image source={{ uri: imageUrl }} style={styles.chatImage} resizeMode="cover" />
-        ) : (
-          <Text style={[styles.bubbleText, isMine ? styles.myText : styles.theirText]}>
-            {item.content}
+      <TouchableOpacity
+        onLongPress={() => deleteMessage(item.id, isMine)}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.bubble, isMine ? styles.myBubble : styles.theirBubble]}>
+          {isImage ? (
+            <Image source={{ uri: imageUrl }} style={styles.chatImage} resizeMode="cover" />
+          ) : (
+            <Text style={[styles.bubbleText, isMine ? styles.myText : styles.theirText]}>
+              {item.content}
+            </Text>
+          )}
+          <Text style={styles.time}>
+            {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
-        )}
-        <Text style={styles.time}>
-          {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-      </View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
