@@ -143,7 +143,7 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 25 : 0}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.back}>← Back</Text>
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   theirText: { color: '#fff' },
   time: { fontSize: 10, color: 'rgba(0,0,0,0.4)', marginTop: 4, alignSelf: 'flex-end' },
   empty: { color: '#aaa', textAlign: 'center', marginTop: 60 },
-  inputRow: { flexDirection: 'row', padding: 12, gap: 8, backgroundColor: '#2a2a3e', alignItems: 'center' },
+  inputRow: { flexDirection: 'row', padding: 12, gap: 8, backgroundColor: '#2a2a3e', alignItems: 'center', paddingBottom: 24 },
   photoBtn: { width: 42, height: 42, justifyContent: 'center', alignItems: 'center' },
   photoIcon: { fontSize: 24 },
   input: { flex: 1, backgroundColor: '#1a1a2e', color: '#fff', padding: 12, borderRadius: 20, fontSize: 15, maxHeight: 100 },
